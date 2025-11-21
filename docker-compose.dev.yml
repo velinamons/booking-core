@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:latest
+    container_name: booking_db_dev
+    environment:
+      POSTGRES_USER: booking_user
+      POSTGRES_PASSWORD: booking_pass
+      POSTGRES_DB: booking_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking_user -d booking_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - booking_network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: booking_app_dev
+    environment:
+      DATABASE_URL: postgresql+asyncpg://booking_user:booking_pass@db:5432/booking_db
+      DEBUG: "True"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./app:/app/app:ro
+      - ./alembic:/app/alembic:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - booking_network
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+      "
+
+volumes:
+  postgres_data_dev:
+
+networks:
+  booking_network:
+    driver: bridge
